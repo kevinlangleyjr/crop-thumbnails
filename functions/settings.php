@@ -10,6 +10,9 @@ class CropThumbnailsSettings {
 		if(is_admin()) {
 			add_filter('plugin_action_links', array($this,'addSettingsLinkToPluginPage'), 10, 2);
 			add_action('admin_head', array($this,'optionsPageStyle'));
+			
+			//needed for quick-test
+			add_action( 'wp_ajax_ctppluginquicktest', array(&$this, 'ajax_callback_admin_quicktest') );
 		}
 	}
 
@@ -71,12 +74,8 @@ class CropThumbnailsSettings {
 		$_sectionID = 'choose_sizes_section';
 		add_settings_section($_sectionID, __('Sizes and Post Types',CROP_THUMBS_LANG), array($this,'sectionDescriptionChooseSizes'), 'page1');
 		add_settings_field('sizes', __('Choose the image size options you want to hide for each post type.',CROP_THUMBS_LANG), array($this,'callback_choose_size'), 'page1', $_sectionID);
-		/*
-		$_sectionID = 'experimental';
-		add_settings_section($_sectionID, __('Experimental Settings',CROP_THUMBS_LANG), array($this,'emptySectionDescription'), 'page1');
-		$_tmpID = 'allow_non_cropped';
-		add_settings_field($_tmpID, __('Allow non cropped image-sizes.',CROP_THUMBS_LANG), 	array($this,'callback_'.$_tmpID), 'page1', $_sectionID, array( 'label_for' => $this->cssPrefix.$_tmpID ));
-		*/
+		$_sectionID = 'quick_test';
+		add_settings_section($_sectionID, __('Plugin Test',CROP_THUMBS_LANG), array($this,'sectionDescriptionTest'), 'page1');
 		$_sectionID = 'developer';
 		add_settings_section($_sectionID, __('Developer Settings',CROP_THUMBS_LANG), array($this,'emptySectionDescription'), 'page1');
 		$_tmpID = 'debug_js';
@@ -94,6 +93,7 @@ class CropThumbnailsSettings {
 	}
 
 	function emptySectionDescription() {/*empty*/ }
+	
 
 	function callback_choose_size() {
 		//get all the data
@@ -103,17 +103,16 @@ class CropThumbnailsSettings {
 		$image_sizes = $this->getImageSizes();
 
 		//output
-		echo '<ul>';
-		foreach($post_types as $post_type=>$value) { ?>
+		?>
+		<ul>
+			<?php foreach($post_types as $post_type=>$value) : ?>
 			<li>
 				<label for="<?php echo $this->cssPrefix.$post_type; ?>">
 					<input id="<?php echo $this->cssPrefix.$post_type;?>" type="checkbox" name="<?php echo $this->optionsKey; ?>[hide_post_type][<?php echo $post_type;?>]" value="1" <?php checked(isset($options['hide_post_type'][$post_type]),true); ?> />
 					<strong><?php echo $value->labels->name; ?></strong>
 				</label>
 				<ul style="margin:1em;">
-				<?php
-
-				foreach($image_sizes as $thumb_name => $data) :
+				<?php foreach($image_sizes as $thumb_name => $data) :
 					$_checked = false;
 					if(!empty($options['hide_size']) && is_array($options['hide_size']) && !empty($options['hide_size'][$post_type][$thumb_name])) {
 						$_checked = true;
@@ -121,6 +120,7 @@ class CropThumbnailsSettings {
 					if($data['crop']=='1') : 
 						$thumb_label = apply_filters( 'cpt_image_size_label', $thumb_name, $data );
 						 ?>
+
 						<li>
 							<label for="<?php echo $this->cssPrefix.$post_type;?>-<?php echo $thumb_name;?>">
 								<input id="<?php echo $this->cssPrefix.$post_type;?>-<?php echo $thumb_name;?>" type="checkbox" name="<?php echo $this->optionsKey; ?>[hide_size][<?php echo $post_type; ?>][<?php echo $thumb_name; ?>]" value="1" <?php echo checked($_checked); ?> />
@@ -129,31 +129,12 @@ class CropThumbnailsSettings {
 						</li>
 					<?php endif; ?>
 				<?php endforeach ?>
+				
 				</ul>
 				<hr />
 			</li>
-			<?php
-		}
-		echo '</ul>';
-	}
-
-	/**
-	 * currently not used
-	 */
-	function callback_allow_non_cropped() {
-		$options = get_option($this->optionsKey);
-		$_id = 'allow_non_cropped';
-		if(empty($options[$_id])) { $options[$_id] = ''; }
-		echo '<input name="'.$this->optionsKey.'['.$_id.']" id="'.$this->cssPrefix.$_id.'" type="checkbox" value="1" ' . checked( 1, $options[$_id], false) . ' />';
-		?>
-		<div class="info">
-			<?php _e('ATTENTION: be aware that you can break things, when you activate this. When activated your are able to cut those images to a spezific dimension that are not cropped. The name of the image will not change. You should be extra carefull when:',CROP_THUMBS_LANG) ?>
-			<ul>
-				<li><?php _e('you had inserted the image before on any page or post. (There may be height and width stored directly in the page-content.)',CROP_THUMBS_LANG); ?></li>
-				<li><?php _e('you use a plugin that expect the original image size. (The original image-size is also "stored" in the filename.)',CROP_THUMBS_LANG); ?></li>
-			</ul>
-			<p><?php _e('The "full" image-size will never be cropped, otherwise you are not able to restore any image-size.',CROP_THUMBS_LANG); ?></p>
-		</div>
+			<?php endforeach; ?>
+		</ul>
 		<?php
 	}
 
@@ -200,12 +181,6 @@ class CropThumbnailsSettings {
 			}
 		}
 
-		/* Experimental Section */
-		$_tmpID = 'allow_non_cropped';
-		if(!empty($input[$_tmpID])) {
-			$storeInDb[$_tmpID] = 1;
-		}
-
 		/* Advanced Section */
 		$_tmpID = 'debug_js';
 		if(!empty($input[$_tmpID])) {
@@ -219,8 +194,177 @@ class CropThumbnailsSettings {
 
 		return $storeInDb;
 	}
+	
+	function sectionDescriptionTest() {?>
+		<button type="button" class="button-secondary cpt_quicktest">Do plugin quick-test.</button>
+		
+		<script>
+		jQuery(document).ready(function($) {
+			var currentlyProcessing = false;
+			
+			
+			$('button.cpt_quicktest').click(function(e) {
+				e.preventDefault();
+				
+				if(!currentlyProcessing) {
+					currentlyProcessing = true;
+					var button = $(this);
+					$('#cpt_quicktest').remove();
+					
+					$.ajax({
+						url: ajaxurl,
+						type: 'POST',
+						data: {
+							action: 'ctppluginquicktest',
+							security: '<?php echo wp_create_nonce( "cpt_quicktest-ajax-nonce" );//only for quicktest ?>'
+						},
+						success: function(responseData){ 
+							var output = '<div id="cpt_quicktest">'+responseData+'</div>';
+							button.after(output);
+							currentlyProcessing = false;
+						},
+						error: function(responseData) {
+							var output = '<div id="cpt_quicktest"><strong class="fails">fail</strong> Failure processing the test - have a look on your server logs.</div>';
+							button.after(output);
+							currentlyProcessing = false;
+						}
+					});
+				}
+			});
+		});
+		</script>
+		<?php
+	}
 
 /* helper functions **********************************************************************************************/
+
+	function ajax_callback_admin_quicktest() {
+		//security
+		if(!current_user_can('manage_options')) die('forbidden');
+		check_ajax_referer('cpt_quicktest-ajax-nonce','security');//only for quicktest
+		
+		$report = array();
+		$doDeleteAttachement = false;
+		$doDeleteTempFile = false;
+		$attachmentId = -1;
+		
+		$sourceFile = dirname( __FILE__ ).DIRECTORY_SEPARATOR.'..'.DIRECTORY_SEPARATOR.'images'.DIRECTORY_SEPARATOR.'test_image.jpg';
+		$tempFile = $this->getUploadDir().DIRECTORY_SEPARATOR.'testfile.jpg';
+		try {
+			//check if tmp-folder can be generated
+			if(is_dir($this->getUploadDir())) {
+				$report[] = '<strong class="success">success</strong> Temporary directory exists';
+			} else {
+				if (!mkdir($this->getUploadDir())) {
+					throw new \Exception('<strong class="fails">fail</strong> Creating the temporary directory ('.esc_attr($this->getUploadDir()).') | is the upload-directory writable with PHP?');
+				} else {
+					$report[] = '<strong class="success">success</strong> Temporary directory could be created';
+				}
+			}
+			
+			//creating the testfile in temporary directory
+			if(!@copy($sourceFile,$tempFile)) {
+				throw new \Exception('<strong class="fails">fail</strong> Copy testfile to temporary directory | is the tmp-directory writable with PHP?');
+			} else {
+				$report[] = '<strong class="success">success</strong> Copy testfile to temporary directory';
+				$doDeleteTempFile = true;
+			}
+			
+			
+			//try to upload the file
+			$_FILES['cpt_quicktest'] = array(
+				'name' => 'test_image.jpg',
+				'type' => 'image/jpeg',
+				'tmp_name' => $tempFile,
+				'error' => 0,
+				'size' => 102610
+			);
+			$attachmentId = media_handle_upload( 'cpt_quicktest', 0, array(), array( 'test_form' => false, 'action'=>'test' ) );
+			$doDeleteTempFile = false;//is be deleted automatically
+			if ( is_wp_error( $attachmentId ) ) {
+				throw new \Exception('<strong class="fails">fail</strong> Adding testfile to media-library ('.$attachmentId->get_error_message().') | is the upload-directory writable with PHP?');
+			} else {
+				$report[] = '<strong class="success">success</strong> Testfile was successfully added to media-library. (ID:'.$attachmentId.')';
+				$doDeleteAttachement = true;
+			}
+			
+			
+			//try to crop with the same function as the plugin does
+			$cropResult = wp_crop_image(    // * @return string|WP_Error|false New filepath on success, WP_Error or false on failure.
+				$attachmentId,	            // * @param string|int $src The source file or Attachment ID.
+				130,                        // * @param int $src_x The start x position to crop from.
+				275,                        // * @param int $src_y The start y position to crop from.
+				945,                        // * @param int $src_w The width to crop.
+				120,                        // * @param int $src_h The height to crop.
+				200,                        // * @param int $dst_w The destination width.
+				25,                         // * @param int $dst_h The destination height.
+				false,						// * @param int $src_abs Optional. If the source crop points are absolute.
+				$tempFile                   // * @param string $dst_file Optional. The destination file to write to.
+			);
+			if ( is_wp_error( $cropResult ) ) {
+				throw new \Exception('<strong class="fails">fail</strong> Cropping the file ('.$cropResult->get_error_message().')');
+			} else {
+				$report[] = '<strong class="success">success</strong> Cropping the file';
+				$doDeleteTempFile = true;
+				$doDeleteAttachement = true;
+			}
+			
+			
+			//check if the dimensions are correct
+			$fileDimensions = getimagesize($tempFile);
+			if(!empty($fileDimensions[0]) && !empty($fileDimensions[1]) && !empty($fileDimensions['mime'])) {
+				$_checkDimensionsOk = true;
+				if($fileDimensions[0]!==200 || $fileDimensions[1]!==25) {
+					$_checkDimensionsOk = false;
+					$report[] = '<strong class="fails">fail</strong> Cropped image dimensions are wrong.';
+				}
+				if($fileDimensions['mime']!=='image/jpeg') {
+					$_checkDimensionsOk = false;
+					$report[] = '<strong class="fails">fail</strong> Cropped image dimensions mime-type is wrong.';
+				}
+				
+				if($_checkDimensionsOk) {
+					$report[] = '<strong class="success">success</strong> Cropped image dimensions are correct.';
+				}
+			} else {
+				$report[] = '<strong class="fails">fail</strong> Problem with getting the image dimensions of the cropped file.';
+			}
+			
+			
+		} catch(\Exception $e) {
+			$report[] = $e->getMessage();
+		}
+		
+		
+		//DO CLEANUP
+		
+		//delete attachement file
+		if($doDeleteAttachement && $attachmentId!==-1) {
+			if ( false === wp_delete_attachment( $attachmentId ) ) {
+				$report[] = '<strong class="fails">fail</strong> Error while deleting test attachment';
+			} else {
+				$report[] = '<strong class="success">success</strong> Test-attachement successfull deleted (ID:'.$attachmentId.')';
+			}
+		}
+		
+		
+		//deleting testfile form temporary directory
+		if($doDeleteTempFile) {
+			if(!@unlink($tempFile)) {
+				$report[] = '<strong class="fails">fail</strong> Remove testfile from temporary directory';
+			} else {
+				$report[] = '<strong class="success">success</strong> Remove testfile from temporary directory';
+			}
+		}
+		
+		echo join($report,"<br />");
+		exit();
+	}
+
+	function getUploadDir() {
+		$upload_dir = wp_upload_dir();
+		return $upload_dir['basedir'].DIRECTORY_SEPARATOR.'tmp';
+	}
 
 
 	/**
@@ -247,14 +391,17 @@ class CropThumbnailsSettings {
 	 */
 	function getImageSizes() {
 		global $_wp_additional_image_sizes;//array with the available image sizes
-		$tmp_sizes = array_flip(get_intermediate_image_sizes());
-		foreach($tmp_sizes as $key=>$value) {
-			$tmp_sizes[$key] = $key;
+
+		$image_size_names = array_flip(get_intermediate_image_sizes());
+		foreach($image_size_names as $key=>$value) {
+			$image_size_names[$key] = $key;
 		}
-		$tmp_sizes = apply_filters( 'image_size_names_choose', $tmp_sizes );
+		
+		$tmp_sizes = apply_filters( 'image_size_names_choose', $image_size_names );
+		$image_size_names = array_merge($image_size_names,$tmp_sizes);
 		
 		$sizes = array();
-		foreach( $tmp_sizes as $_size=>$theName ) {
+		foreach( $image_size_names as $_size=>$theName ) {
 
 			if ( in_array( $_size, $this->defaultSizes ) ) {
 				$sizes[ $_size ]['width']  = intval(get_option( $_size . '_size_w' ));
@@ -269,6 +416,9 @@ class CropThumbnailsSettings {
 			}
 			$sizes[ $_size ]['name'] = $theName;
 		}
+
+		$sizes = apply_filters('crop_thumbnails_image_sizes',$sizes);
+
 		return $sizes;
 	}
 

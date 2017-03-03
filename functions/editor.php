@@ -129,6 +129,7 @@ class CropPostThumbnailsEditor {
 	 * Display the crop editor.
 	 * @param $_REQUEST['image_id'] - ID of the image to show
 	 * @param $_REQUEST['viewmode']=='single' - without the back-link
+	 * @param $_REQUEST['posttype']=='page' - (optional) will be used to hide certain image sizes (default: '')
 	 */
 	function byImageId() {
 		global $cptSettings,$content_width;
@@ -158,6 +159,10 @@ class CropPostThumbnailsEditor {
 				$current_parent_post_type = $_tmp->post_type;
 				$current_parent_post_id = $_tmp->ID;
 			}
+		}
+
+		if(!empty($_REQUEST['posttype']) && post_type_exists($_REQUEST['posttype'])) {
+			$current_parent_post_type = $_REQUEST['posttype'];
 		}
 
 		$all_image_sizes = $cptSettings->getImageSizes();
@@ -285,7 +290,7 @@ jQuery(document).ready(function($) {
 								if($this->isLowRes($value,$orig_img)) {
 									$_lowResWarning = ' <span class="lowResWarning">'.__('Original image size too small for good crop quality!',CROP_THUMBS_LANG).'</span>';
 								}
-								
+
 								$img_size_label = apply_filters( 'cpt_image_size_label', $value['name'], $value );
 
 								$jsonDataValues = array(

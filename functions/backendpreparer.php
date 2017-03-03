@@ -1,8 +1,8 @@
-<?php 
+<?php
 class CropPostThumbnailsBackendPreparer {
-	
+
 	private $allowedMime = array('image/jpeg','image/png');
-	
+
 	function __construct() {
 		if ( is_admin() ) {
 			//add style and javascript
@@ -26,7 +26,7 @@ class CropPostThumbnailsBackendPreparer {
 			wp_enqueue_style('crop-thumbnails-options-style',plugins_url('css/options.css',dirname(__FILE__)));
 		}
 	}
-	
+
 	/**
 	 * For adding the "crop-thumbnail"-link on posts, pages and the mediathek
 	 */
@@ -42,7 +42,7 @@ class CropPostThumbnailsBackendPreparer {
 			add_action('admin_footer',array($this,'addLinksToAdmin'));
 		}
 	}
-	
+
 	/**
 	 * adds the links into post-types and the media-library
 	 */
@@ -63,11 +63,61 @@ jQuery(document).ready(function($) {
 			var img = $(images[i]);//select image
 			var imageUrl = img.attr('src');
 			var imageUrlArray = imageUrl.split("?");
-			
+
 			img.attr('src',imageUrlArray[0]+'?&cacheBreak='+(new Date()).getTime());
 		}
 	};
-	
+
+	/**
+	 * Adds a button to the featured image metabox.
+	 * The button will be visible only if a featured image is set.
+	 */
+	function handleFeaturedImageBox() {
+		/**
+		 * add link to featured image box
+		 */
+		var baseElem = $('#postimagediv');
+		if(!baseElem.length) {
+			return;
+		}
+
+		var featuredImageLinkButton = '';
+		featuredImageLinkButton+= '<p class="cropFeaturedImageWrap hidden">';
+		featuredImageLinkButton+= '<a class="button cropThumbnailsLink" href="#" data-cropthumbnail=\'{"image_id":'+ parseInt(wp.media.featuredImage.get()) +',"viewmode":"single","posttype":"<?php echo get_post_type(); ?>"}\' title="<?php esc_attr_e('Crop Featured Image',CROP_THUMBS_LANG) ?>">';
+		featuredImageLinkButton+= '<span class="wp-media-buttons-icon"></span> <?php esc_html_e('Crop Featured Image',CROP_THUMBS_LANG); ?>';
+		featuredImageLinkButton+= '</a>';
+		baseElem.find('.inside').after( $(featuredImageLinkButton) );
+
+
+		function updateCropFeaturedImageButton(currentId) {
+			var wrap = baseElem.find('.cropFeaturedImageWrap');
+
+			if(currentId===-1) {
+				wrap.addClass('hidden');
+			} else {
+				wrap.removeClass('hidden');
+			}
+			var link = wrap.find('a');
+			var data = link.data('cropthumbnail');
+			data.image_id = currentId;
+			link.data('cropthumbnail',data);
+		}
+
+		wp.media.featuredImage.frame().on( 'select', function(){
+			updateCropFeaturedImageButton( parseInt(wp.media.featuredImage.get()) );
+		});
+
+		baseElem.on('click', '#remove-post-thumbnail', function(){
+			updateCropFeaturedImageButton(-1);
+		});
+
+		baseElem.on('click', '.handlediv',function() {
+
+		});
+
+		updateCropFeaturedImageButton( parseInt(wp.media.featuredImage.get()) );
+	}
+
 	/** add link on posts and pages **/
 	if ($('body.post-php, body.page-php, body.page-new.php, body.post-new-php').length > 0) {
 		var post_id_hidden = $('form#post #post_ID');
@@ -79,33 +129,14 @@ jQuery(document).ready(function($) {
 			 * add link on top of editor *
 			 */
 			var buttonContent = '';
-			buttonContent+= '<a ';
-				buttonContent+= 'class="button cropThumbnailBox"  href="#" data-cropthumbnail=\'{"post_id":'+ post_id_hidden +'}\' ';
-				buttonContent+= 'title="<?php esc_attr_e('Crop Thumbnails',CROP_THUMBS_LANG) ?>"';
-			buttonContent+= '>';
-			buttonContent+= '<span class="dashicons dashicons-image-crop" style="color:#82878C;font-size: 14px;vertical-align: middle;"></span>';
-			buttonContent+= '<?php esc_html_e('Crop Thumbnails',CROP_THUMBS_LANG); ?>';
+
+			buttonContent+= '<a class="button cropThumbnailsLink" href="#" data-cropthumbnail=\'{"post_id":'+ post_id_hidden +'}\' title="<?php esc_attr_e('Crop Thumbnails',CROP_THUMBS_LANG) ?>">';
+			buttonContent+= '<span class="wp-media-buttons-icon"></span> <?php esc_html_e('Crop Thumbnails',CROP_THUMBS_LANG); ?>';
 			buttonContent+= '</a>';
 			$('#wp-content-media-buttons').append(buttonContent);
 
+			handleFeaturedImageBox();
 
-			/**
-			 * add link to featured image box *
-			 */
-			buttonContent = '';
-			buttonContent+= '<a ';
-			buttonContent+= 'class="button cropThumbnailBox" href="#" data-cropthumbnail=\'{"image_by_post_id":'+ post_id_hidden +',"viewmode":"single"}\' ';
-			buttonContent+= 'title="<?php esc_attr_e('Crop Featured Image',CROP_THUMBS_LANG) ?>"';
-			buttonContent+= '>';
-			buttonContent+= '<span class="dashicons dashicons-image-crop" style="color:#82878C;font-size: 14px;vertical-align: middle;"></span>';
-			buttonContent+= '<?php esc_html_e('Crop Featured Image',CROP_THUMBS_LANG); ?>';
-			buttonContent+= '</a>';
-
-
-			var featuredImageLink = $(buttonContent).css({'margin':'5px', 'padding':'5px','display':'inline-block','line-height':'1.2'});
-			$('#postimagediv .inside').after(featuredImageLink);
-			
-			
 			$('body').on('cropThumbnailModalClosed',function() {
 				//lets cache-break the crop-thumbnail-preview-box
 				CROP_THUMBNAILS_DO_CACHE_BREAK($('#postimagediv img'));
@@ -122,12 +153,8 @@ jQuery(document).ready(function($) {
 				last_span.append(' | ');
 
 				var buttonContent = '';
-				buttonContent+= '<a ';
-				buttonContent+= 'class="cropThumbnailBox" href="#" data-cropthumbnail=\'{"image_id":'+ post_id +',"viewmode":"single"}\' ';
-				buttonContent+= 'title="<?php esc_attr_e('Crop Featured Image',CROP_THUMBS_LANG) ?>"';
-				buttonContent+= '>';
-				buttonContent+= '<span class="dashicons dashicons-image-crop" style="color:#82878C;font-size: 14px;vertical-align: middle;"></span>';
-				buttonContent+= '<?php esc_html_e('Crop Featured Image',CROP_THUMBS_LANG); ?>';
+				buttonContent+= '<a class="cropThumbnailsLink" href="#" data-cropthumbnail=\'{"image_id":'+ post_id +',"viewmode":"single"}\' title="<?php esc_attr_e('Crop Featured Image',CROP_THUMBS_LANG) ?>">';
+				buttonContent+= '<span class="wp-media-buttons-icon"></span> <?php esc_html_e('Crop Featured Image',CROP_THUMBS_LANG); ?>';
 				buttonContent+= '</a>';
 
 
@@ -146,7 +173,7 @@ jQuery(document).ready(function($) {
 	 */
 	$(document).on('click', '.cropThumbnailBox', function(e) {
 		e.preventDefault();
-		
+
 		<?php
 		/*****************************************************************************/
 		/**
@@ -158,11 +185,11 @@ jQuery(document).ready(function($) {
 			'maxHeightOffset' => 100, //window-width minus "height_offset" equals modal-height
 		);
 		$modal_window_settings = apply_filters('crop_thumbnails_modal_window_settings',$modal_window_settings);
-		
+
 		$jsLimitOutput = '';
 		if($modal_window_settings['limitToWidth']!==false) {
 			$value = abs(intval($modal_window_settings['limitToWidth']));
-			
+
 			$jsLimitOutput.= 'if(boxViewportWidth>'.$value.') { boxViewportWidth = '.$value.'; }';
 		}
 		/*****************************************************************************/
@@ -170,11 +197,11 @@ jQuery(document).ready(function($) {
 
 		//modal-box dimensions (will not adjust on viewport change)
 		var boxViewportHeight = $(window).height() - <?php echo abs(intval($modal_window_settings['maxHeightOffset'])); ?>;
-		var boxViewportWidth = window.outerWidth - <?php echo abs(intval($modal_window_settings['maxWidthOffset'])); ?>;
-		
+		var boxViewportWidth = $(window).outerWidth() - <?php echo abs(intval($modal_window_settings['maxWidthOffset'])); ?>;
+
 		<?php echo $jsLimitOutput; ?>
-	
-		
+
+
 
 		//get the data from the link
 		var data = $(this).data('cropthumbnail');
@@ -188,49 +215,51 @@ jQuery(document).ready(function($) {
 		var content = $('<div><iframe src="'+url+'"></iframe></div>');
 		var overlay;
 		var isModalClassInitialSet = $('body').hasClass('modal-open');
-		content.dialog({
-				dialogClass : 'cropThumbnailModal',
-				modal : true,
-				title : $(this).attr('title'),
-				resizable : false,
-				draggable : false,
-				autoOpen : false,
-				closeOnEscape : true,
-				height : boxViewportHeight,
-				width : boxViewportWidth,
-				close : function(event, ui ) {
-					if(overlay!==undefined) {
-						overlay.unbind('click');
-					}
 
-					//remove modal-open class (disable the scrollbars)
-					if(!isModalClassInitialSet) {
-						$('body').removeClass('modal-open');
-					}
-					$(this).dialog('destroy');
-					
-					/**
-					 * We will trigger that the modal of the crop thumbnail is closed.
-					 * So everyone that is up to, could build a cache-breaker on their images.
-					 * HOW-TO cache-break:
-					 * $('body').on('cropThumbnailModalClosed',function() {
-					 *     CROP_THUMBNAILS_DO_CACHE_BREAK( $('.your-image-selector') );
-					 * });
-					 */
-					$('body').trigger('cropThumbnailModalClosed');
-				},
-				open : function(event, ui) {
-					overlay = $('.ui-widget-overlay.ui-front');
-					overlay.addClass('cropThumbnailModalOverlay');
-					overlay.click(function() {
-						content.dialog('close');
-					});
-
-					//add body class (disable the scrollbars)
-					$('body').addClass('modal-open');
+		var dialogOptions = {
+			dialogClass : 'cropThumbnailModal',
+			modal : true,
+			title : $(this).attr('title'),
+			resizable : false,
+			draggable : false,
+			autoOpen : false,
+			closeOnEscape : true,
+			height : boxViewportHeight,
+			width : boxViewportWidth,
+			close : function(event, ui ) {
+				if(overlay!==undefined) {
+					overlay.unbind('click');
 				}
-			})
-			.dialog('open');
+
+				//remove modal-open class (disable the scrollbars)
+				if(!isModalClassInitialSet) {
+					$('body').removeClass('modal-open');
+				}
+				$(this).dialog('destroy');
+
+				/**
+				 * We will trigger that the modal of the crop thumbnail is closed.
+				 * So everyone that is up to, could build a cache-breaker on their images.
+				 * HOW-TO cache-break:
+				 * $('body').on('cropThumbnailModalClosed',function() {
+				 *     CROP_THUMBNAILS_DO_CACHE_BREAK( $('.your-image-selector') );
+				 * });
+				 */
+				$('body').trigger('cropThumbnailModalClosed');
+			},
+			open : function(event, ui) {
+				overlay = $('.ui-widget-overlay.ui-front');
+				overlay.addClass('cropThumbnailModalOverlay');
+				overlay.click(function() {
+					content.dialog('close');
+				});
+
+				//add body class (disable the scrollbars)
+				$('body').addClass('modal-open');
+			}
+		};
+
+		content.dialog(dialogOptions).dialog('open');
 	});
 });
 </script>
@@ -248,9 +277,8 @@ jQuery(document).ready(function($) {
 
 		if(in_array($post->post_mime_type,$this->allowedMime)) {
 			$html = '';
-			$html.= '<a class="button cropThumbnailBox" href="#" data-cropthumbnail=\'{"image_id":'.$post->ID.',"viewmode":"single"}\' ';
-			$html.= 'title="'.esc_attr__('Crop Featured Image',CROP_THUMBS_LANG).'">';
-			$html.= '<span class="dashicons dashicons-image-crop" style="color:#82878C;font-size: 14px;vertical-align: middle;"></span>'.esc_html__('Crop Featured Image',CROP_THUMBS_LANG);
+			$html.= '<a class="button cropThumbnailsLink" href="#" data-cropthumbnail=\'{"image_id":'.$post->ID.',"viewmode":"single"}\' title="'.esc_attr__('Crop Featured Image',CROP_THUMBS_LANG).'">';
+			$html.= '<span class="wp-media-buttons-icon"></span> '.esc_html__('Crop Featured Image',CROP_THUMBS_LANG);
 			$html.= '</a>';
 
 			$form_fields['cropthumbnails'] = array(
