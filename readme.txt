@@ -8,7 +8,6 @@ Stable tag: trunk
 License: GPL v3
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
-
 "Crop Thumbnails" made it easy to get exacly that specific image-detail you want to show in your featured image or gallery image.
 
 == Description ==

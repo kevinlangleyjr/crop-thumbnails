@@ -168,10 +168,10 @@ jQuery(document).ready(function($) {
 	}
 
 	/**
-	 * Create Listener for click-events with element-class ".cropThumbnailBox".
+	 * Create Listener for click-events with element-class ".cropThumbnailsLink".
 	 * Open the modal box.
 	 */
-	$(document).on('click', '.cropThumbnailBox', function(e) {
+	$(document).on('click', '.cropThumbnailsLink', function(e) {
 		e.preventDefault();
 
 		<?php
